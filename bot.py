@@ -35,6 +35,29 @@ def webhook():
 
     if parsed.get("isReminder") and parsed.get("datetime"):
         reminders.append({**parsed, "to": from_number, "sent": False})
-        reply = f"✅ Got it! I'll remind you to: {parsed['task']}"
+        reply = f"✅ הבנתי! אזכיר לך: {parsed['task']}"
     else:
-        repl
+        reply = "לא הצלחתי להבין את התזכורת. נסה לכתוב למשל: 'תזכיר לי להתקשר לאמא בשעה 6'"
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+    <Response><Message>{reply}</Message></Response>"""
+
+def check_reminders():
+    now = datetime.now()
+    for reminder in reminders:
+        if not reminder["sent"] and datetime.fromisoformat(reminder["datetime"]) <= now:
+            twilio_client.messages.create(
+                from_=os.getenv("TWILIO_WHATSAPP_FROM"),
+                to=reminder["to"],
+                body=f"⏰ תזכורת: {reminder['task']}"
+            )
+            reminder["sent"] = True
+            print(f"Sent reminder: {reminder['task']}")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(check_reminders, "interval", minutes=1)
+scheduler.start()
+
+if __name__ == "__main__":
+    print("🤖 Bot running!")
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
