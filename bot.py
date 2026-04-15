@@ -57,7 +57,7 @@ Message:
         )
 
         raw_text = response.content[0].text
-        print("🧠 Claude raw response:", raw_text)
+        print("🧠 CLAUDE RAW:", repr(raw_text))
 
         # Clean markdown formatting if Claude adds it
         clean = raw_text.replace("```json", "").replace("```", "").strip()
