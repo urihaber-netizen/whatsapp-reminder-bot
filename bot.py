@@ -24,6 +24,8 @@ reminders = []
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
+    print("🔥 WEBHOOK HIT")
+
     print("📩 Incoming request:", request.form)
 
     user_message = request.form.get("Body")
