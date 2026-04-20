@@ -96,20 +96,21 @@ Message: {user_message}
     # REMINDER STORAGE
     # ---------------------------
 
-    if parsed.get("isReminder") and parsed.get("datetime"):
+    if parsed.get("isReminder"):
 
-        reminder = {
-            "task": parsed.get("task"),
-            "datetime": parsed.get("datetime"),
-            "to": from_number,
-            "sent": False
-        }
+    if not parsed.get("datetime"):
+        parsed["datetime"] = (datetime.now(timezone.utc)).isoformat()
 
-        reminders.append(reminder)
+    reminder = {
+        "task": parsed.get("task"),
+        "datetime": parsed.get("datetime"),
+        "to": from_number,
+        "sent": False
+    }
 
-        logger.info(f"[REMINDER_STORAGE] Reminder stored: {reminder}")
+    reminders.append(reminder)
 
-        reply = f"✅ הבנתי! אזכיר לך: {parsed.get('task')}"
+    logger.info(f"[REMINDER_STORAGE] Reminder stored: {reminder}")
 
     else:
 
