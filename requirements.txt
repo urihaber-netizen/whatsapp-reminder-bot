@@ -3,3 +3,4 @@ twilio
 anthropic
 apscheduler
 python-dotenv
+loguru
