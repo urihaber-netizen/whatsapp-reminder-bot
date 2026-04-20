@@ -1,114 +1,59 @@
 import os
-import json
 from datetime import datetime, timezone, timedelta
 from flask import Flask, request
 from twilio.rest import Client
 from twilio.twiml.messaging_response import MessagingResponse
-from anthropic import Anthropic
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from loguru import logger
 
-# Load environment variables
+# Load env
 load_dotenv()
 
-# Configure loguru
+# Logger
 logger.remove()
-logger.add("bot.log", rotation="10 MB")
 logger.add(lambda msg: print(msg, end=""))
 
 app = Flask(__name__)
 
-# Clients
-claude = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-twilio_client = Client(os.getenv("TWILIO_SID"), os.getenv("TWILIO_TOKEN"))
+# Twilio client
+twilio_client = Client(
+    os.getenv("TWILIO_SID"),
+    os.getenv("TWILIO_TOKEN")
+)
 
-# In-memory reminders (OK for single instance)
+# In-memory storage (temporary)
 reminders = []
 
 logger.info("[SERVER] Bot starting...")
 
 # ---------------------------
-# WEBHOOK
+# SAFE WEBHOOK (NO CRASHES)
 # ---------------------------
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
 
-    logger.info("[WEBHOOK] Incoming request")
-
-    user_message = request.form.get("Body")
-    from_number = request.form.get("From")
-
-    logger.info(f"[WEBHOOK] Message: {user_message}")
-    logger.info(f"[WEBHOOK] From: {from_number}")
-
-    if not user_message:
-        logger.warning("[WEBHOOK] Empty message received")
-        return "OK", 200
-
-    # ---------------------------
-    # ANTHROPIC
-    # ---------------------------
-
     try:
-        logger.info("[ANTHROPIC] Sending request to Claude")
+        logger.info("🚨 WEBHOOK HIT")
 
-        response = claude.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            messages=[{
-                "role": "user",
-                "content": f"""
-Today is {datetime.now(timezone.utc).isoformat()}.
+        user_message = request.form.get("Body")
+        from_number = request.form.get("From")
 
-Extract reminder info.
+        logger.info(f"[WEBHOOK] Message: {user_message}")
+        logger.info(f"[WEBHOOK] From: {from_number}")
 
-Return JSON ONLY:
-{{
-  "task": "...",
-  "datetime": "ISO8601 or null",
-  "isReminder": true/false
-}}
+        if not user_message:
+            return "OK", 200
 
-Message: {user_message}
-"""
-            }]
-        )
+        # ---------------------------
+        # SIMPLE TEST PARSER (SAFE)
+        # ---------------------------
 
-        raw_text = response.content[0].text
-        logger.info(f"[ANTHROPIC] Raw: {raw_text}")
-
-        start = raw_text.find("{")
-        end = raw_text.rfind("}") + 1
-
-        parsed = json.loads(raw_text[start:end])
-        logger.info(f"[ANTHROPIC] Parsed: {parsed}")
-
-    except Exception as e:
-        logger.error(f"[ANTHROPIC] Error: {e}")
-        parsed = {"isReminder": False}
-
-    # ---------------------------
-    # REMINDER STORAGE
-    # ---------------------------
-
-    reply = "לא הצלחתי להבין את הבקשה."
-
-    if parsed.get("isReminder"):
-
-        task = parsed.get("task", "תזכורת")
-
-        # SAFE fallback if datetime is missing or null
-        reminder_time = parsed.get("datetime")
-
-        if not reminder_time:
-            reminder_time = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
-            logger.warning("[REMINDER_STORAGE] Missing datetime → defaulting to +1 minute")
-
+        # Always treat message as reminder for now
         reminder = {
-            "task": task,
-            "datetime": reminder_time,
+            "task": user_message,
+            "datetime": (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat(),
             "to": from_number,
             "sent": False
         }
@@ -117,17 +62,19 @@ Message: {user_message}
 
         logger.info(f"[REMINDER_STORAGE] Saved: {reminder}")
 
-        reply = f"✅ הבנתי! אזכיר לך: {task}"
+        reply_text = f"✅ תזכורת נשמרה: {user_message}"
 
-    else:
-        logger.warning("[REMINDER_STORAGE] Not a reminder")
+        resp = MessagingResponse()
+        resp.message(reply_text)
 
-    resp = MessagingResponse()
-    resp.message(reply)
+        logger.info("[WEBHOOK] Response sent successfully")
 
-    logger.info("[WEBHOOK] Response sent")
+        return str(resp)
 
-    return str(resp)
+    except Exception as e:
+        logger.error(f"[WEBHOOK CRASH SAFE HANDLED] {e}")
+        return "OK", 200
+
 
 # ---------------------------
 # REMINDER CHECKER
@@ -150,8 +97,6 @@ def check_reminders():
                 reminder["datetime"].replace("Z", "+00:00")
             )
 
-            logger.info(f"[REMINDER_CHECKER] Checking {reminder_time} vs {now}")
-
             if reminder_time <= now:
 
                 logger.info(f"[TWILIO] Sending: {reminder['task']}")
@@ -167,7 +112,8 @@ def check_reminders():
                 logger.success("[TWILIO] Sent successfully")
 
         except Exception as e:
-            logger.error(f"[REMINDER_CHECKER] Error: {e}")
+            logger.error(f"[CHECKER ERROR] {e}")
+
 
 # ---------------------------
 # SCHEDULER
@@ -185,7 +131,7 @@ logger.info("[SCHEDULER] Started")
 
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
 
     logger.info(f"[SERVER] Running on port {port}")
 
