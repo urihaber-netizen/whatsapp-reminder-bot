@@ -4,3 +4,4 @@ anthropic
 apscheduler
 python-dotenv
 loguru
+psycopg2-binary
